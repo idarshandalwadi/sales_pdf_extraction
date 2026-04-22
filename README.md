@@ -1,4 +1,6 @@
 
+LIVE Preview URL:
+https://extractsales.netlify.app/
 
 # Sales Invoice PDF Extractor
 
