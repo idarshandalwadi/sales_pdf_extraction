@@ -1,7 +1,5 @@
 import { useState, useCallback } from 'react'
 import { parsePdfFile } from './lib/pdfParser'
-import html2canvas from 'html2canvas'
-import { jsPDF } from 'jspdf'
 import usersData from './users.json'
 import './index.css'
 
@@ -110,60 +108,115 @@ function App() {
   };
 
   const handleExportPDF = async () => {
-    const element = document.getElementById('pdf-export-content');
-    
-    // Temporarily disable overflow so html2canvas doesn't truncate the table
-    const containers = element.querySelectorAll('.products-table-container');
-    containers.forEach(c => c.style.overflowX = 'visible');
+  const element = document.getElementById('pdf-export-content');
+  if (!element) return alert("Content not found");
 
-    try {
-      const canvas = await html2canvas(element, { 
-        scale: 2, 
-        useCORS: true, 
-        backgroundColor: '#0f172a' 
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      let heightLeft = pdfHeight;
-      let position = 0;
-      
-      // Add first page
+  const containers = element.querySelectorAll('.products-table-container');
+  containers.forEach(c => c.style.overflowX = 'visible');
+
+  try {
+    const html2canvas = (await import("html2canvas")).default;
+    const { jsPDF } = await import("jspdf");
+
+    const canvas = await html2canvas(element, { 
+      scale: 1.5,
+      useCORS: true,
+      backgroundColor: null
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+    let heightLeft = pdfHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position -= pageHeight;
+      pdf.addPage();
       pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
       heightLeft -= pageHeight;
-      
-      // Add subsequent pages if content overflows
-      while (heightLeft > 0) {
-        position = position - pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
-      }
-      
-      let rawName = data?.clientName || 'Export';
-      // Strip control characters (newlines) and illegal path characters, but keep spaces/parentheses
-      let safeName = rawName.replace(/[\r\n\x00-\x1F\x7F<>:"/\\|?*]/g, '').trim();
-      if (!safeName) safeName = 'Export';
-      
-      pdf.save(`${safeName}_Report.pdf`);
-    } catch (err) {
-      console.error("PDF Export error:", err);
-      alert("Failed to export PDF. Please try again.");
-    } finally {
-      // Restore overflow after saving
-      containers.forEach(c => c.style.overflowX = 'auto');
     }
-  };
+
+    let rawName = data?.clientName || 'Export';
+    let safeName = rawName.replace(/[\r\n\x00-\x1F\x7F<>:"/\\|?*]/g, '').trim();
+    if (!safeName) safeName = 'Export';
+
+    pdf.save(`${safeName}_Report.pdf`);
+  } catch (err) {
+    console.error("PDF Export error:", err);
+    alert("Failed to export PDF.");
+  } finally {
+    containers.forEach(c => c.style.overflowX = 'auto');
+  }
+};
+
+  // const handleExportPDF = async () => {
+  //   const element = document.getElementById('pdf-export-content');
+    
+  //   // Temporarily disable overflow so html2canvas doesn't truncate the table
+  //   const containers = element.querySelectorAll('.products-table-container');
+  //   containers.forEach(c => c.style.overflowX = 'visible');
+
+  //   try {
+  //     const canvas = await html2canvas(element, { 
+  //       scale: 2, 
+  //       useCORS: true, 
+  //       backgroundColor: '#0f172a' 
+  //     });
+      
+  //     const imgData = canvas.toDataURL('image/png');
+      
+  //     const pdf = new jsPDF({
+  //       orientation: 'portrait',
+  //       unit: 'mm',
+  //       format: 'a4'
+  //     });
+      
+  //     const pdfWidth = pdf.internal.pageSize.getWidth();
+  //     const pageHeight = pdf.internal.pageSize.getHeight();
+  //     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+  //     let heightLeft = pdfHeight;
+  //     let position = 0;
+      
+  //     // Add first page
+  //     pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+  //     heightLeft -= pageHeight;
+      
+  //     // Add subsequent pages if content overflows
+  //     while (heightLeft > 0) {
+  //       position = position - pageHeight;
+  //       pdf.addPage();
+  //       pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+  //       heightLeft -= pageHeight;
+  //     }
+      
+  //     let rawName = data?.clientName || 'Export';
+  //     // Strip control characters (newlines) and illegal path characters, but keep spaces/parentheses
+  //     let safeName = rawName.replace(/[\r\n\x00-\x1F\x7F<>:"/\\|?*]/g, '').trim();
+  //     if (!safeName) safeName = 'Export';
+      
+  //     pdf.save(`${safeName}_Report.pdf`);
+  //   } catch (err) {
+  //     console.error("PDF Export error:", err);
+  //     alert("Failed to export PDF. Please try again.");
+  //   } finally {
+  //     // Restore overflow after saving
+  //     containers.forEach(c => c.style.overflowX = 'auto');
+  //   }
+  // };
 
   const handleLogin = () => {
     localStorage.setItem('isAuthenticated', 'true');
