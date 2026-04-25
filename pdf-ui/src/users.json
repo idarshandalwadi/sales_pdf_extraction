@@ -2,7 +2,32 @@
   "users": [
     {
       "username": "admin",
-      "password": "admin"
+      "password": "Darshan@2112",
+      "role": "admin",
+      "pdf_limit": 999999,
+      "paid": true,
+      "paid_date": "2026-04-25",
+      "current_count": 0
+    },
+    {
+      "username": "darshan",
+      "password": "darshan",
+      "role": "user",
+      "email": "dalwadidarshan83@gmail.com",
+      "pdf_limit": 2,
+      "paid": false,
+      "paid_date": null,
+      "current_count": 0
+    },
+    {
+      "username": "jay",
+      "password": "jay",
+      "role": "user",
+      "email": "jay@gmail.com",
+      "pdf_limit": 10,
+      "paid": false,
+      "paid_date": null,
+      "current_count": 0
     }
   ]
 }

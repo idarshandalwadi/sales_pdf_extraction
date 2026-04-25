@@ -55,12 +55,49 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
 }
 
 .header-content h1 {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-main);
+}
+
+.header-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.top-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.top-nav-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.top-nav-btn:hover {
+  color: var(--text-main);
+}
+
+.top-nav-btn.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
 }
 
 .global-footer {
@@ -74,6 +111,25 @@ body {
 }
 
 /* Login Styles */
+.login-page-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.login-page-main .login-container {
+  min-height: unset;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .login-container {
   min-height: 100vh;
   display: flex;
@@ -182,6 +238,77 @@ body {
 .header p {
   color: var(--text-muted);
   font-size: 1.1rem;
+}
+
+.admin-panel {
+  margin-bottom: 2rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.admin-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.admin-panel-header h2 {
+  font-size: 1.25rem;
+}
+
+.admin-success-message {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #86efac;
+  border-radius: 0.5rem;
+}
+
+.admin-table-container {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 760px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.admin-table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.admin-table td input[type="number"],
+.admin-table td input[type="date"] {
+  width: 100%;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  border-radius: 0.4rem;
+  padding: 0.45rem 0.5rem;
+}
+
+.admin-checkbox-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* Dropzone Styles */
@@ -550,6 +677,20 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-actions-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .top-nav {
+    flex-wrap: wrap;
+  }
+
   .app-container {
     padding: 2rem 1rem;
   }
