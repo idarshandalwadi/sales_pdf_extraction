@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import bcrypt from 'bcryptjs'
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,8 +15,11 @@ const sanitizeUser = (user) => ({
   pdf_limit: Number(user.pdf_limit ?? 0),
   paid: Boolean(user.paid),
   paid_date: user.paid_date,
-  current_count: Number(user.current_count ?? 0)
+  current_count: Number(user.current_count ?? 0),
+  is_active: user.is_active !== false
 });
+
+const isUserActive = (user) => user?.is_active !== false;
 
 async function readUsers() {
   const raw = await fs.readFile(usersFilePath, 'utf8');
@@ -62,9 +66,21 @@ function createApiMiddleware() {
       if (req.method === 'POST' && req.url === '/api/login') {
         const { username, password } = await collectJsonBody(req);
         const users = await readUsers();
-        const user = users.find((u) => u.username === username && u.password === password);
+        const normalizedUsername = String(username ?? '').trim().toLowerCase();
+        const user = users.find((u) => String(u.username ?? '').toLowerCase() === normalizedUsername);
 
         if (!user) {
+          res.statusCode = 401;
+          return res.end(JSON.stringify({ error: 'Invalid credentials' }));
+        }
+
+        if (!isUserActive(user)) {
+          res.statusCode = 403;
+          return res.end(JSON.stringify({ error: 'User is disabled. Please contact administrator.' }));
+        }
+
+        const isValidPassword = await bcrypt.compare(String(password ?? ''), String(user.password ?? ''));
+        if (!isValidPassword) {
           res.statusCode = 401;
           return res.end(JSON.stringify({ error: 'Invalid credentials' }));
         }
@@ -81,6 +97,11 @@ function createApiMiddleware() {
         if (!user) {
           res.statusCode = 404;
           return res.end(JSON.stringify({ error: 'User not found' }));
+        }
+
+        if (!isUserActive(user)) {
+          res.statusCode = 403;
+          return res.end(JSON.stringify({ error: 'User is disabled. Please contact administrator.' }));
         }
 
         const pdf_limit = Number(user.pdf_limit ?? 0);
@@ -106,6 +127,11 @@ function createApiMiddleware() {
         }
 
         const user = users[userIndex];
+        if (!isUserActive(user)) {
+          res.statusCode = 403;
+          return res.end(JSON.stringify({ error: 'User is disabled. Please contact administrator.' }));
+        }
+
         const pdf_limit = Number(user.pdf_limit ?? 0);
         const current_count = Number(user.current_count ?? 0);
 
@@ -143,6 +169,76 @@ function createApiMiddleware() {
         }));
       }
 
+      if (req.method === 'POST' && req.url === '/api/admin/users') {
+        if (!hasAdminAccess(req)) {
+          res.statusCode = 403;
+          return res.end(JSON.stringify({ error: 'Admin access required' }));
+        }
+
+        const payload = await collectJsonBody(req);
+        const username = String(payload.username ?? '').trim();
+        const plainPassword = String(payload.password ?? '');
+
+        if (!username) {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: 'username is required' }));
+        }
+
+        if (!plainPassword) {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: 'password is required' }));
+        }
+
+        const users = await readUsers();
+        const normalizedUsername = username.toLowerCase();
+        const alreadyExists = users.some((user) => String(user.username ?? '').toLowerCase() === normalizedUsername);
+        if (alreadyExists) {
+          res.statusCode = 409;
+          return res.end(JSON.stringify({ error: 'Username already exists' }));
+        }
+
+        const role = payload.role === 'admin' ? 'admin' : 'user';
+        const pdfLimit = Number(payload.pdf_limit ?? 0);
+        const currentCount = Number(payload.current_count ?? 0);
+        const paid = Boolean(payload.paid);
+        const paidDate = paid ? (payload.paid_date ?? null) : null;
+        const email = payload.email ? String(payload.email).trim() : undefined;
+
+        if (!Number.isFinite(pdfLimit) || pdfLimit < 0) {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: 'pdf_limit must be a non-negative number' }));
+        }
+
+        if (!Number.isFinite(currentCount) || currentCount < 0) {
+          res.statusCode = 400;
+          return res.end(JSON.stringify({ error: 'current_count must be a non-negative number' }));
+        }
+
+        const passwordHash = await bcrypt.hash(plainPassword, 10);
+        const newUser = {
+          username,
+          password: passwordHash,
+          role,
+          pdf_limit: pdfLimit,
+          paid,
+          paid_date: paidDate,
+          current_count: currentCount,
+          is_active: true
+        };
+
+        if (email) {
+          newUser.email = email;
+        }
+
+        users.push(newUser);
+        await writeUsers(users);
+
+        res.statusCode = 201;
+        return res.end(JSON.stringify({
+          user: sanitizeUser(newUser)
+        }));
+      }
+
       const adminUpdatePathMatch = req.url.match(/^\/api\/admin\/users\/([^/]+)$/);
       if (req.method === 'PUT' && adminUpdatePathMatch) {
         if (!hasAdminAccess(req)) {
@@ -165,6 +261,7 @@ function createApiMiddleware() {
         const nextCurrentCount = Number(payload.current_count ?? existingUser.current_count ?? 0);
         const nextPaid = typeof payload.paid === 'boolean' ? payload.paid : Boolean(existingUser.paid);
         const nextPaidDate = nextPaid ? (payload.paid_date ?? existingUser.paid_date ?? null) : null;
+        const nextIsActive = typeof payload.is_active === 'boolean' ? payload.is_active : isUserActive(existingUser);
 
         if (!Number.isFinite(nextPdfLimit) || nextPdfLimit < 0) {
           res.statusCode = 400;
@@ -181,7 +278,8 @@ function createApiMiddleware() {
           pdf_limit: nextPdfLimit,
           current_count: nextCurrentCount,
           paid: nextPaid,
-          paid_date: nextPaidDate
+          paid_date: nextPaidDate,
+          is_active: nextIsActive
         };
 
         users[userIndex] = updatedUser;

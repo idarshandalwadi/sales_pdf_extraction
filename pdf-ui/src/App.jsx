@@ -79,31 +79,122 @@ async function updateAdminUser(currentUser, username, updates) {
   return payload.user;
 }
 
-function AdminPanel({
+async function createAdminUser(currentUser, newUserPayload) {
+  const response = await fetch('/api/admin/users', {
+    method: 'POST',
+    headers: getAuthHeaders(currentUser),
+    body: JSON.stringify(newUserPayload)
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || 'Failed to create user');
+  }
+
+  return payload.user;
+}
+
+function AddUserPanel({
+  error,
+  message,
+  newUserForm,
+  creatingUser,
+  onNewUserFieldChange,
+  onCreateUser
+}) {
+  return (
+    <section className="admin-panel container mt-3">
+      <div className="admin-panel-header mb-3">
+        <h2 className="h4 mb-0">Add User</h2>
+      </div>
+      {error ? <div className="error-message">{error}</div> : null}
+      {message ? <div className="admin-success-message">{message}</div> : null}
+      <form className="login-form card card-body shadow-sm" onSubmit={onCreateUser}>
+        <div className="form-group">
+          <label>New Username</label>
+          <input
+            type="text"
+            className="form-control"
+            value={newUserForm.username}
+            onChange={(e) => onNewUserFieldChange('username', e.target.value)}
+            placeholder="username"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label>New Password</label>
+          <input
+            type="password"
+            className="form-control"
+            value={newUserForm.password}
+            onChange={(e) => onNewUserFieldChange('password', e.target.value)}
+            placeholder="password"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label>Email (*)</label>
+          <input
+            type="email"
+            className="form-control"
+            value={newUserForm.email}
+            onChange={(e) => onNewUserFieldChange('email', e.target.value)}
+            placeholder="user@example.com"
+            required
+          />
+        </div>
+        <div className="form-group">
+          <label>Role</label>
+          <select className="form-select" value={newUserForm.role} onChange={(e) => onNewUserFieldChange('role', e.target.value)}>
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>PDF Limit</label>
+          <input
+            type="number"
+            min="0"
+            className="form-control"
+            value={newUserForm.pdf_limit}
+            onChange={(e) => onNewUserFieldChange('pdf_limit', e.target.value)}
+            required
+          />
+        </div>
+        <button type="submit" className="btn btn-primary p-3 w-50" disabled={creatingUser}>
+          {creatingUser ? 'Creating...' : 'Create User'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function ManageUsersPanel({
   users,
   loading,
   error,
   message,
   onFieldChange,
-  onSave
+  onSave,
+  onDisable
 }) {
   return (
-    <section className="admin-panel">
-      <div className="admin-panel-header">
-        <h2>User Management</h2>
+    <section className="admin-panel container mt-3">
+      <div className="admin-panel-header mb-3">
+        <h2 className="h4 mb-0">Manage Users</h2>
       </div>
-      <p>Update `current_count`, `paid`, `paid_date`, and `pdf_limit` for each user.</p>
       {error ? <div className="error-message">{error}</div> : null}
       {message ? <div className="admin-success-message">{message}</div> : null}
       {loading ? (
         <div className="no-data">Loading users...</div>
       ) : (
-        <div className="admin-table-container">
-          <table className="admin-table">
+        <div className="admin-table-container table-responsive card card-body shadow-sm">
+          <table className="admin-table table table-hover align-middle mb-0">
             <thead>
               <tr>
                 <th>Username</th>
                 <th>Role</th>
+                <th>Status</th>
                 <th>Current Count</th>
                 <th>PDF Limit</th>
                 <th>Paid</th>
@@ -116,11 +207,14 @@ function AdminPanel({
                 <tr key={user.username}>
                   <td>{user.username}</td>
                   <td>{user.role}</td>
+                  <td>{user.is_active === false ? 'Disabled' : 'Active'}</td>
                   <td>
                     <input
                       type="number"
                       min="0"
+                      className="form-control"
                       value={user.current_count}
+                      disabled={user.is_active === false}
                       onChange={(e) => onFieldChange(index, 'current_count', e.target.value)}
                     />
                   </td>
@@ -128,7 +222,9 @@ function AdminPanel({
                     <input
                       type="number"
                       min="0"
+                      className="form-control"
                       value={user.pdf_limit}
+                      disabled={user.is_active === false}
                       onChange={(e) => onFieldChange(index, 'pdf_limit', e.target.value)}
                     />
                   </td>
@@ -136,7 +232,9 @@ function AdminPanel({
                     <label className="admin-checkbox-wrap">
                       <input
                         type="checkbox"
+                        className="form-check-input"
                         checked={Boolean(user.paid)}
+                        disabled={user.is_active === false}
                         onChange={(e) => onFieldChange(index, 'paid', e.target.checked)}
                       />
                       <span>{user.paid ? 'Yes' : 'No'}</span>
@@ -145,15 +243,21 @@ function AdminPanel({
                   <td>
                     <input
                       type="date"
+                      className="form-control"
                       value={user.paid_date || ''}
-                      disabled={!user.paid}
+                      disabled={!user.paid || user.is_active === false}
                       onChange={(e) => onFieldChange(index, 'paid_date', e.target.value)}
                     />
                   </td>
-                  <td>
-                    <button type="button" className="btn-primary" onClick={() => onSave(index)}>
+                  <td className="d-flex align-items-center">
+                    <button type="button" className="btn btn-primary btn-sm px-3 py-2" disabled={user.is_active === false} onClick={() => onSave(index)}>
                       Save
                     </button>
+                    {user.is_active === false ? null : (
+                      <button type="button" className="btn btn-outline-danger btn-sm ms-2 p-2" onClick={() => onDisable(index)}>
+                        Disable
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -187,18 +291,19 @@ function Login({ onLogin }) {
   return (
     <div className="app-wrapper">
       <GlobalHeader />
-      <main className="login-page-main">
-        <div className="login-container">
-          <div className="login-card">
+      <main className="login-page-main container py-4">
+        <div className="login-container row justify-content-center">
+          <div className="login-card col-12 col-md-8 col-lg-5 card shadow-sm p-4">
             <div className="login-header">
-              <h2>Welcome Back</h2>
-              <p>Sign in to access the invoice extractor</p>
+              <h2 className="h3">Welcome Back</h2>
+              <p className="text-muted">Sign in to access the invoice extractor</p>
             </div>
             <form onSubmit={handleSubmit} className="login-form">
               <div className="form-group">
                 <label>Username</label>
                 <input
                   type="text"
+                  className="form-control"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="Enter username"
@@ -209,6 +314,7 @@ function Login({ onLogin }) {
                 <label>Password</label>
                 <input
                   type="password"
+                  className="form-control"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
@@ -216,7 +322,7 @@ function Login({ onLogin }) {
                 />
               </div>
               {error && <div className="login-error">{error}</div>}
-              <button type="submit" className="btn-primary login-btn">Sign In</button>
+              <button type="submit" className="btn btn-primary w-100 login-btn">Sign In</button>
             </form>
           </div>
         </div>
@@ -247,6 +353,14 @@ function App() {
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminError, setAdminError] = useState('');
   const [adminMessage, setAdminMessage] = useState('');
+  const [creatingUser, setCreatingUser] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    username: '',
+    password: '',
+    email: '',
+    role: 'user',
+    pdf_limit: '0'
+  });
   const [usedPdfCount, setUsedPdfCount] = useState(() => {
     try {
       const stored = localStorage.getItem(AUTH_USER_KEY);
@@ -491,7 +605,7 @@ function App() {
   const handleViewChange = async (view) => {
     if (!isAdmin) return;
     setActiveView(view);
-    if (view === 'users') {
+    if (view === 'manage-users') {
       await loadAdminUsers();
     }
   };
@@ -508,6 +622,63 @@ function App() {
       }
       return { ...user, [field]: value };
     }));
+  };
+
+  const handleNewUserFieldChange = (field, value) => {
+    setNewUserForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreateAdminUser = async (e) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    const username = String(newUserForm.username || '').trim();
+    const password = String(newUserForm.password || '');
+    const role = newUserForm.role === 'admin' ? 'admin' : 'user';
+    const email = String(newUserForm.email || '').trim();
+    const pdfLimit = Number(newUserForm.pdf_limit || 0);
+
+    if (!username || !password) {
+      setAdminError('Username and password are required.');
+      return;
+    }
+
+    if (!Number.isFinite(pdfLimit) || pdfLimit < 0) {
+      setAdminError('PDF limit must be a non-negative number.');
+      return;
+    }
+
+    setAdminError('');
+    setAdminMessage('');
+    setCreatingUser(true);
+
+    try {
+      const createdUser = await createAdminUser(currentUser, {
+        username,
+        password,
+        role,
+        email: email || undefined,
+        pdf_limit: pdfLimit,
+        paid: false,
+        paid_date: null,
+        current_count: 0,
+        is_active: true
+      });
+
+      setAdminUsers((prev) => [...prev, createdUser]);
+      setAdminMessage(`User "${createdUser.username}" created successfully.`);
+      setNewUserForm({
+        username: '',
+        password: '',
+        email: '',
+        role: 'user',
+        pdf_limit: '0'
+      });
+    } catch (err) {
+      setAdminError(err?.message || 'Failed to create user.');
+    } finally {
+      setCreatingUser(false);
+    }
   };
 
   const handleSaveAdminUser = async (index) => {
@@ -543,6 +714,33 @@ function App() {
     }
   };
 
+  const handleDisableAdminUser = async (index) => {
+    const targetUser = adminUsers[index];
+    if (!targetUser || !currentUser) return;
+    if (targetUser.is_active === false) return;
+    if (targetUser.username === currentUser.username) {
+      setAdminError('You cannot disable your own account.');
+      return;
+    }
+    const isConfirmed = window.confirm(
+      `Are you sure you want to disable user "${targetUser.username}"?\n\nThis is a soft delete and the user will not be removed from data.`
+    );
+    if (!isConfirmed) return;
+
+    setAdminError('');
+    setAdminMessage('');
+
+    try {
+      const updatedUser = await updateAdminUser(currentUser, targetUser.username, {
+        is_active: false
+      });
+      setAdminUsers((prev) => prev.map((user, i) => i === index ? updatedUser : user));
+      setAdminMessage(`User "${updatedUser.username}" disabled successfully.`);
+    } catch (err) {
+      setAdminError(err?.message || 'Failed to disable user.');
+    }
+  };
+
   if (!isAuthenticated) {
     return <Login onLogin={handleLogin} />
   }
@@ -557,30 +755,42 @@ function App() {
         onChangeView={handleViewChange}
       />
 
-      <div className="app-container">
-        <header className="header">
+      <div className="app-container container py-3">
+        <header className="header p-5 card-body shadow-sm mb-3">
           <h1>Sales Invoice Extractor</h1>
           <p>Extract sales and return quantities grouped by financial year. (April to March)</p>
-          <p>
+          <p className="mb-0">
             User: {currentUser?.username || 'Unknown'} | Used: {usedPdfCount}/{userLimit} | Remaining: {remainingCount}
           </p>
         </header>
 
-      {isAdmin && activeView === 'users' ? (
-        <AdminPanel
+      {isAdmin && activeView === 'add-user' ? (
+        <AddUserPanel
+          error={adminError}
+          message={adminMessage}
+          newUserForm={newUserForm}
+          creatingUser={creatingUser}
+          onNewUserFieldChange={handleNewUserFieldChange}
+          onCreateUser={handleCreateAdminUser}
+        />
+      ) : null}
+
+      {isAdmin && activeView === 'manage-users' ? (
+        <ManageUsersPanel
           users={adminUsers}
           loading={adminLoading}
           error={adminError}
           message={adminMessage}
           onFieldChange={handleAdminFieldChange}
           onSave={handleSaveAdminUser}
+          onDisable={handleDisableAdminUser}
         />
       ) : null}
 
       {activeView === 'extractor' && !data && (
         <main className="main-content">
           <div 
-            className={`dropzone ${isDragging ? 'dragging' : ''} ${isParsing ? 'parsing' : ''}`}
+            className={`dropzone card card-body text-center ${isDragging ? 'dragging' : ''} ${isParsing ? 'parsing' : ''}`}
             onDragOver={onDragOver}
             onDragLeave={onDragLeave}
             onDrop={onDrop}
@@ -608,7 +818,7 @@ function App() {
                   id="file-upload"
                   className="file-input"
                 />
-                <label htmlFor="file-upload" className="btn-primary">Browse Files</label>
+                <label htmlFor="file-upload" className="btn btn-primary p-3">Browse Files</label>
               </>
             )}
           </div>
@@ -617,22 +827,22 @@ function App() {
       )}
 
       {activeView === 'extractor' && data && (
-        <div className="results-container">
-          <div className="results-header">
-            <h2 style={{marginRight: '2rem'}}>Extraction Results</h2>
-            <div className="header-actions">
-              <button className="btn-primary" onClick={handleExportPDF} style={{marginRight: '1rem'}}>
+        <div className="results-container card card-body shadow-sm">
+          <div className="results-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h2 className="h4 me-3 mb-0">Extraction Results</h2>
+            <div className="header-actions d-flex gap-2">
+              <button className="btn btn-primary" onClick={handleExportPDF}>
                 Export to PDF
               </button>
-              <button className="btn-secondary" onClick={() => setData(null)}>Upload Another File</button>
+              <button className="btn btn-outline-secondary" onClick={() => setData(null)}>Upload Another File</button>
             </div>
           </div>
           
           {data.yearsData.length === 0 ? (
             <div className="no-data">No valid sales or returns found in this document.</div>
           ) : (
-            <div className="years-list" id="pdf-export-content">
-              <div className="client-header">
+            <div className="years-list mt-3" id="pdf-export-content">
+              <div className="client-header mb-3">
                 <h3>Client: <span className="client-name-highlight">{data.clientName}</span></h3>
               </div>
               {data.yearsData.map((fyData, i) => {
@@ -641,12 +851,12 @@ function App() {
                 const totalNet = totalSell - totalReturn;
                 
                 return (
-                <div key={i} className="year-card">
-                  <div className="year-header">
+                <div key={i} className="year-card card card-body mb-3">
+                  <div className="year-header mb-2">
                     <h3>Year: {fyData.year}</h3>
                   </div>
-                  <div className="products-table-container">
-                    <table className="products-table">
+                  <div className="products-table-container table-responsive">
+                    <table className="products-table table table-hover mb-0">
                       <thead>
                         <tr>
                           <th>Product Name</th>
