@@ -88,11 +88,13 @@ export async function parsePdfFile(file) {
   const allSales = [];
   const allReturns = [];
   let clientName = null;
+  let totalTextItems = 0;
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale: 1.0 });
     const content = await page.getTextContent();
+    totalTextItems += content.items.length;
     const halfWidth = viewport.width / 2;
 
     const leftItems = [];
@@ -163,6 +165,10 @@ export async function parsePdfFile(file) {
 
     allReturns.push(...leftEntries);
     allSales.push(...rightEntries);
+  }
+
+  if (totalTextItems === 0) {
+    throw new Error('This PDF appears to be scanned/image-based (no selectable text).');
   }
 
   return {
