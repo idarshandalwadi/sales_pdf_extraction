@@ -1,6 +1,14 @@
-import * as pdfjsLib from 'pdfjs-dist';
+let pdfJsLibPromise = null;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+async function getPdfJsLib() {
+  if (!pdfJsLibPromise) {
+    pdfJsLibPromise = import('pdfjs-dist/legacy/build/pdf.mjs').then((pdfjsLib) => {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.mjs`;
+      return pdfjsLib;
+    });
+  }
+  return pdfJsLibPromise;
+}
 
 function getFinancialYear(dateStr) {
   // dateStr format: DD/MM/YYYY
@@ -72,6 +80,7 @@ function parseTextToEntries(textLines, isSale) {
 }
 
 export async function parsePdfFile(file) {
+  const pdfjsLib = await getPdfJsLib();
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
   const pdf = await loadingTask.promise;
