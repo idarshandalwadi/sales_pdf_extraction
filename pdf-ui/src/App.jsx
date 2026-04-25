@@ -453,40 +453,93 @@ function App() {
 
   const containers = element.querySelectorAll('.products-table-container');
   containers.forEach(c => c.style.overflowX = 'visible');
+  element.classList.add('pdf-export-dark-mode');
 
   try {
     const html2canvas = (await import("html2canvas")).default;
     const { jsPDF } = await import("jspdf");
 
-    const canvas = await html2canvas(element, { 
-      scale: 1.5,
+    const canvas = await html2canvas(element, {
+      scale: 1.1,
       useCORS: true,
-      backgroundColor: null
+      backgroundColor: '#0f172a'
     });
-
-    const imgData = canvas.toDataURL('image/png');
 
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: 'a4'
+      format: 'a4',
+      compress: true
     });
 
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    const pageMarginMm = 8;
+    const contentWidthMm = pdfWidth - (pageMarginMm * 2);
+    const contentHeightMm = pageHeight - (pageMarginMm * 2);
+    const pxPerMm = canvas.width / contentWidthMm;
+    const maxSliceHeightPx = Math.max(1, Math.floor(contentHeightMm * pxPerMm));
 
-    let heightLeft = pdfHeight;
-    let position = 0;
+    const rowBreakPoints = Array.from(element.querySelectorAll('tr'))
+      .map((row) => {
+        const rowRect = row.getBoundingClientRect();
+        const elementRect = element.getBoundingClientRect();
+        const yInElement = rowRect.top - elementRect.top + element.scrollTop;
+        return Math.round(yInElement * (canvas.height / Math.max(element.scrollHeight, 1)));
+      })
+      .filter((point) => point > 0 && point < canvas.height)
+      .sort((a, b) => a - b);
 
-    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-    heightLeft -= pageHeight;
+    let currentY = 0;
+    let isFirstPage = true;
 
-    while (heightLeft > 0) {
-      position -= pageHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
+    while (currentY < canvas.height) {
+      const naturalEnd = Math.min(currentY + maxSliceHeightPx, canvas.height);
+      let sliceEnd = naturalEnd;
+
+      if (naturalEnd < canvas.height) {
+        const minBreak = currentY + Math.floor(maxSliceHeightPx * 0.55);
+        const candidates = rowBreakPoints.filter((point) => point > minBreak && point < naturalEnd - 6);
+        if (candidates.length > 0) {
+          sliceEnd = candidates[candidates.length - 1];
+        }
+      }
+
+      if (sliceEnd <= currentY) {
+        sliceEnd = naturalEnd;
+      }
+
+      const sliceHeightPx = sliceEnd - currentY;
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = sliceHeightPx;
+      const pageCtx = pageCanvas.getContext('2d');
+      if (!pageCtx) {
+        throw new Error('Failed to render PDF page canvas.');
+      }
+
+      pageCtx.drawImage(
+        canvas,
+        0,
+        currentY,
+        canvas.width,
+        sliceHeightPx,
+        0,
+        0,
+        canvas.width,
+        sliceHeightPx
+      );
+
+      const pageImage = pageCanvas.toDataURL('image/jpeg', 0.65);
+      const renderedHeightMm = (sliceHeightPx / canvas.width) * contentWidthMm;
+
+      if (!isFirstPage) {
+        pdf.addPage();
+      }
+      pdf.addImage(pageImage, 'JPEG', pageMarginMm, pageMarginMm, contentWidthMm, renderedHeightMm);
+
+      isFirstPage = false;
+      currentY = sliceEnd;
     }
 
     let rawName = data?.clientName || 'Export';
@@ -498,6 +551,7 @@ function App() {
     console.error("PDF Export error:", err);
     alert("Failed to export PDF.");
   } finally {
+    element.classList.remove('pdf-export-dark-mode');
     containers.forEach(c => c.style.overflowX = 'auto');
   }
 };

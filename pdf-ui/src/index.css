@@ -567,6 +567,36 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Export-only dark mode: enforce white text for PDF capture */
+#pdf-export-content.pdf-export-dark-mode {
+  color: #ffffff !important;
+}
+
+#pdf-export-content.pdf-export-dark-mode,
+#pdf-export-content.pdf-export-dark-mode .year-card,
+#pdf-export-content.pdf-export-dark-mode .client-header,
+#pdf-export-content.pdf-export-dark-mode .year-header,
+#pdf-export-content.pdf-export-dark-mode .products-table th,
+#pdf-export-content.pdf-export-dark-mode .products-table td,
+#pdf-export-content.pdf-export-dark-mode .totals-row td {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: none !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+#pdf-export-content.pdf-export-dark-mode .client-name-highlight,
+#pdf-export-content.pdf-export-dark-mode .qty-col.sell,
+#pdf-export-content.pdf-export-dark-mode .qty-col.return,
+#pdf-export-content.pdf-export-dark-mode .qty-col.net,
+#pdf-export-content.pdf-export-dark-mode .totals-row .qty-col.sell,
+#pdf-export-content.pdf-export-dark-mode .totals-row .qty-col.return {
+  color: #ffffff !important;
+  background: none !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
 @media print {
   body {
     background: white;
