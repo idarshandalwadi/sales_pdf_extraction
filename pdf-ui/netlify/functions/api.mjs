@@ -7,6 +7,53 @@ const seedUsersPathCandidates = [
   path.resolve(process.cwd(), 'netlify/functions/lib/seed-users.json'),
   path.resolve(process.cwd(), 'pdf-ui/netlify/functions/lib/seed-users.json')
 ];
+const defaultSeedUsers = {
+  users: [
+    {
+      username: 'admin',
+      password: '$2b$10$Ccrqip1wQBx5.lbLHuodmOtDcek8OrVq1CUKob5mNYmZG.4B1zgza',
+      role: 'admin',
+      pdf_limit: 999999,
+      paid: true,
+      paid_date: '2026-04-25',
+      current_count: 0,
+      is_active: true
+    },
+    {
+      username: 'darshan',
+      password: '$2b$10$IpUCX51w7eFYhkGKxi4aQ.K8IElEFthXyp3JYQhlXfRkUWu11Fooy',
+      role: 'user',
+      email: 'dalwadidarshan83@gmail.com',
+      pdf_limit: 2,
+      paid: false,
+      paid_date: null,
+      current_count: 0,
+      is_active: true
+    },
+    {
+      username: 'jay',
+      password: '$2b$10$GYGhfdpY6o51lNZEHKZVuu5j2eaUpmCS4qzSPvBDJvW3rNs0OpYuq',
+      role: 'user',
+      email: 'jay@gmail.com',
+      pdf_limit: 10,
+      paid: false,
+      paid_date: null,
+      current_count: 1,
+      is_active: true
+    },
+    {
+      username: 'Anushree',
+      password: '$2b$10$houqcquaP3MQyN/o7NZMVOiXbTJ.CjA67LoOBI/T7nLTH5JEr/E/i',
+      role: 'user',
+      pdf_limit: 3,
+      paid: false,
+      paid_date: null,
+      current_count: 0,
+      email: 'anu@gmail.com',
+      is_active: true
+    }
+  ]
+};
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -37,7 +84,7 @@ async function ensureRuntimeUsersFile() {
     }
 
     if (!seedRaw) {
-      throw new Error('Unable to locate seed-users.json in Netlify runtime.');
+      seedRaw = `${JSON.stringify(defaultSeedUsers, null, 2)}\n`;
     }
 
     await fs.writeFile(runtimeUsersPath, seedRaw, 'utf8');
