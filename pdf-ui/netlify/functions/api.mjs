@@ -91,14 +91,21 @@ export async function handler(event) {
       const { username, password } = body;
       const users = await readUsers();
       const normalizedUsername = String(username ?? '').trim().toLowerCase();
-      const user = users.find((u) => String(u.username ?? '').toLowerCase() === normalizedUsername);
+      const userIndex = users.findIndex((u) => String(u.username ?? '').toLowerCase() === normalizedUsername);
+      const user = userIndex >= 0 ? users[userIndex] : null;
 
       if (!user) return response(401, { error: 'Invalid credentials' });
       if (!isUserActive(user)) return response(403, { error: 'User is disabled. Please contact administrator.' });
 
-      const isValidPassword = await bcrypt.compare(String(password ?? ''), String(user.password ?? ''));
+      let isValidPassword = await bcrypt.compare(String(password ?? ''), String(user.password ?? ''));
+      if (!isValidPassword && String(user.password ?? '') === String(password ?? '')) {
+        const upgradedUser = { ...user, password: await bcrypt.hash(String(password ?? ''), 10) };
+        users[userIndex] = upgradedUser;
+        await writeUsers(users);
+        isValidPassword = true;
+      }
       if (!isValidPassword) return response(401, { error: 'Invalid credentials' });
-      return response(200, { user: sanitizeUser(user) });
+      return response(200, { user: sanitizeUser(users[userIndex]) });
     }
 
     const usagePathMatch = routePath.match(/^\/api\/users\/([^/]+)\/usage$/);

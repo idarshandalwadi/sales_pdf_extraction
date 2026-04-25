@@ -67,7 +67,8 @@ function createApiMiddleware() {
         const { username, password } = await collectJsonBody(req);
         const users = await readUsers();
         const normalizedUsername = String(username ?? '').trim().toLowerCase();
-        const user = users.find((u) => String(u.username ?? '').toLowerCase() === normalizedUsername);
+        const userIndex = users.findIndex((u) => String(u.username ?? '').toLowerCase() === normalizedUsername);
+        const user = userIndex >= 0 ? users[userIndex] : null;
 
         if (!user) {
           res.statusCode = 401;
@@ -79,13 +80,19 @@ function createApiMiddleware() {
           return res.end(JSON.stringify({ error: 'User is disabled. Please contact administrator.' }));
         }
 
-        const isValidPassword = await bcrypt.compare(String(password ?? ''), String(user.password ?? ''));
+        let isValidPassword = await bcrypt.compare(String(password ?? ''), String(user.password ?? ''));
+        if (!isValidPassword && String(user.password ?? '') === String(password ?? '')) {
+          const upgradedUser = { ...user, password: await bcrypt.hash(String(password ?? ''), 10) };
+          users[userIndex] = upgradedUser;
+          await writeUsers(users);
+          isValidPassword = true;
+        }
         if (!isValidPassword) {
           res.statusCode = 401;
           return res.end(JSON.stringify({ error: 'Invalid credentials' }));
         }
 
-        return res.end(JSON.stringify({ user: sanitizeUser(user) }));
+        return res.end(JSON.stringify({ user: sanitizeUser(users[userIndex]) }));
       }
 
       const usagePathMatch = req.url.match(/^\/api\/users\/([^/]+)\/usage$/);
