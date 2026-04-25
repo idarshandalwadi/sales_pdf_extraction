@@ -1,12 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const seedUsersPath = path.resolve(__dirname, 'lib/seed-users.json');
 const runtimeUsersPath = '/tmp/sales-pdf-users.json';
+const seedUsersPathCandidates = [
+  path.resolve(process.cwd(), 'netlify/functions/lib/seed-users.json'),
+  path.resolve(process.cwd(), 'pdf-ui/netlify/functions/lib/seed-users.json')
+];
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -26,7 +26,20 @@ async function ensureRuntimeUsersFile() {
   try {
     await fs.access(runtimeUsersPath);
   } catch {
-    const seedRaw = await fs.readFile(seedUsersPath, 'utf8');
+    let seedRaw = null;
+    for (const candidatePath of seedUsersPathCandidates) {
+      try {
+        seedRaw = await fs.readFile(candidatePath, 'utf8');
+        break;
+      } catch {
+        // Try next candidate path.
+      }
+    }
+
+    if (!seedRaw) {
+      throw new Error('Unable to locate seed-users.json in Netlify runtime.');
+    }
+
     await fs.writeFile(runtimeUsersPath, seedRaw, 'utf8');
   }
 }
