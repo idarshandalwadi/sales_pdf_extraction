@@ -8,8 +8,8 @@
   --text-muted: #94a3b8;
   --primary: #3b82f6;
   --primary-hover: #2563eb;
-  --accent-sell: #10b981;
-  --accent-return: #ef4444;
+  --accent-sell: #ffffff;
+  --accent-return: #ffffff;
   --border: rgba(148, 163, 184, 0.1);
   --glow: 0 0 20px rgba(59, 130, 246, 0.15);
 }
@@ -26,7 +26,7 @@ body {
   color: var(--text-main);
   line-height: 1.6;
   min-height: 100vh;
-  background-image: 
+  background-image:
     radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
     radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
   background-attachment: fixed;
@@ -249,7 +249,7 @@ body {
 .header h1 {
   font-size: 2.5rem;
   font-weight: 700;
-  background: linear-gradient(to right, #60a5fa, #a78bfa);
+  /* background: linear-gradient(to right, #60a5fa, #a78bfa); */
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
@@ -373,9 +373,17 @@ body {
 }
 
 @keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-  100% { transform: translateY(0px); }
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
 }
 
 .dropzone h2 {
@@ -422,7 +430,9 @@ body {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Results Display */
@@ -431,8 +441,15 @@ body {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .results-header {
@@ -468,13 +485,12 @@ body {
 }
 
 .client-name-highlight {
-  color: var(--text-main);
+  color: #ffffff;
   font-weight: 700;
   font-size: 1.5rem;
   margin-left: 0.5rem;
-  background: linear-gradient(to right, #60a5fa, #34d399);
+  /* background: linear-gradient(to right, #60a5fa, #34d399); */
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .year-card {
@@ -515,13 +531,13 @@ body {
   text-align: left;
 }
 
-.products-table th, 
+.products-table th,
 .products-table td {
   padding: 1rem 1.5rem;
 }
 
 .products-table th {
-  background: rgba(255, 255, 255, 0.02);
+  background: transparent;
   color: var(--text-muted);
   font-weight: 500;
   font-size: 0.85rem;
@@ -540,7 +556,7 @@ body {
 }
 
 .products-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(148, 163, 184);
 }
 
 .totals-row td {
@@ -555,11 +571,13 @@ body {
 }
 
 .totals-row .qty-col.sell {
-  color: #34d399; /* slightly brighter for total */
+  color: #34d399;
+  /* slightly brighter for total */
 }
 
 .totals-row .qty-col.return {
-  color: #f87171; /* slightly brighter for total */
+  color: #f87171;
+  /* slightly brighter for total */
 }
 
 .qty-col {
@@ -603,14 +621,18 @@ body {
     color: black;
     background-image: none;
   }
-  
+
   .app-container {
     padding: 0;
     max-width: 100%;
   }
 
   /* Hide UI elements that shouldn't be printed */
-  .header, .dropzone, .header-actions, button, .error-message {
+  .header,
+  .dropzone,
+  .header-actions,
+  button,
+  .error-message {
     display: none !important;
   }
 
@@ -623,7 +645,7 @@ body {
     margin-bottom: 1rem;
     padding-bottom: 0;
   }
-  
+
   .results-header h2 {
     color: black;
   }
@@ -676,15 +698,18 @@ body {
     border-top: 2px solid #94a3b8;
   }
 
-  .qty-col.sell, .totals-row .qty-col.sell {
+  .qty-col.sell,
+  .totals-row .qty-col.sell {
     color: black;
   }
 
-  .qty-col.return, .totals-row .qty-col.return {
+  .qty-col.return,
+  .totals-row .qty-col.return {
     color: black;
   }
-  
-  .qty-col.net.positive, .qty-col.net.negative {
+
+  .qty-col.net.positive,
+  .qty-col.net.negative {
     color: black;
   }
 }
@@ -747,7 +772,7 @@ body {
     font-size: 1.25rem;
   }
 
-  .products-table th, 
+  .products-table th,
   .products-table td {
     padding: 0.75rem 0.5rem;
     font-size: 0.85rem;
@@ -755,7 +780,7 @@ body {
 }
 
 td.sell {
-  color: var(--accent-sell);
+  /* color: var(--accent-sell); */
   font-weight: 500;
 }
 

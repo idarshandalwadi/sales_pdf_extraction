@@ -402,10 +402,10 @@ function App() {
       setError(`Upload limit reached. You have used ${usedPdfCount}/${userLimit} PDFs.`);
       return;
     }
-    
+
     setError(null);
     setIsParsing(true);
-    
+
     try {
       // Re-check usage from server to prevent stale client state.
       const currentUsage = await getUsageForUser(currentUser.username);
@@ -448,117 +448,133 @@ function App() {
   };
 
   const handleExportPDF = async () => {
-  const element = document.getElementById('pdf-export-content');
-  if (!element) return alert("Content not found");
+    const element = document.getElementById('pdf-export-content');
+    if (!element) return alert("Content not found");
 
-  const containers = element.querySelectorAll('.products-table-container');
-  containers.forEach(c => c.style.overflowX = 'visible');
-  element.classList.add('pdf-export-dark-mode');
+    const containers = element.querySelectorAll('.products-table-container');
+    containers.forEach(c => c.style.overflowX = 'visible');
+    // Use light background for B&W export — no dark-mode class needed
 
-  try {
-    const html2canvas = (await import("html2canvas")).default;
-    const { jsPDF } = await import("jspdf");
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
 
-    const canvas = await html2canvas(element, {
-      scale: 1.1,
-      useCORS: true,
-      backgroundColor: '#0f172a'
-    });
+      const colorCanvas = await html2canvas(element, {
+        scale: 1.1,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      });
 
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-      compress: true
-    });
+      // Convert to grayscale to reduce exported PDF size
+      const canvas = document.createElement('canvas');
+      canvas.width = colorCanvas.width;
+      canvas.height = colorCanvas.height;
+      const gCtx = canvas.getContext('2d');
+      gCtx.drawImage(colorCanvas, 0, 0);
+      const imageData = gCtx.getImageData(0, 0, canvas.width, canvas.height);
+      const pixels = imageData.data;
+      for (let i = 0; i < pixels.length; i += 4) {
+        // Standard luminance-weighted grayscale (ITU-R BT.601)
+        const gray = Math.round(pixels[i] * 0.299 + pixels[i + 1] * 0.587 + pixels[i + 2] * 0.114);
+        pixels[i] = gray;
+        pixels[i + 1] = gray;
+        pixels[i + 2] = gray;
+      }
+      gCtx.putImageData(imageData, 0, 0);
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const pageMarginMm = 8;
-    const contentWidthMm = pdfWidth - (pageMarginMm * 2);
-    const contentHeightMm = pageHeight - (pageMarginMm * 2);
-    const pxPerMm = canvas.width / contentWidthMm;
-    const maxSliceHeightPx = Math.max(1, Math.floor(contentHeightMm * pxPerMm));
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
 
-    const rowBreakPoints = Array.from(element.querySelectorAll('tr'))
-      .map((row) => {
-        const rowRect = row.getBoundingClientRect();
-        const elementRect = element.getBoundingClientRect();
-        const yInElement = rowRect.top - elementRect.top + element.scrollTop;
-        return Math.round(yInElement * (canvas.height / Math.max(element.scrollHeight, 1)));
-      })
-      .filter((point) => point > 0 && point < canvas.height)
-      .sort((a, b) => a - b);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const pageMarginMm = 8;
+      const contentWidthMm = pdfWidth - (pageMarginMm * 2);
+      const contentHeightMm = pageHeight - (pageMarginMm * 2);
+      const pxPerMm = canvas.width / contentWidthMm;
+      const maxSliceHeightPx = Math.max(1, Math.floor(contentHeightMm * pxPerMm));
 
-    let currentY = 0;
-    let isFirstPage = true;
+      const rowBreakPoints = Array.from(element.querySelectorAll('tr'))
+        .map((row) => {
+          const rowRect = row.getBoundingClientRect();
+          const elementRect = element.getBoundingClientRect();
+          const yInElement = rowRect.top - elementRect.top + element.scrollTop;
+          return Math.round(yInElement * (canvas.height / Math.max(element.scrollHeight, 1)));
+        })
+        .filter((point) => point > 0 && point < canvas.height)
+        .sort((a, b) => a - b);
 
-    while (currentY < canvas.height) {
-      const naturalEnd = Math.min(currentY + maxSliceHeightPx, canvas.height);
-      let sliceEnd = naturalEnd;
+      let currentY = 0;
+      let isFirstPage = true;
 
-      if (naturalEnd < canvas.height) {
-        const minBreak = currentY + Math.floor(maxSliceHeightPx * 0.55);
-        const candidates = rowBreakPoints.filter((point) => point > minBreak && point < naturalEnd - 6);
-        if (candidates.length > 0) {
-          sliceEnd = candidates[candidates.length - 1];
+      while (currentY < canvas.height) {
+        const naturalEnd = Math.min(currentY + maxSliceHeightPx, canvas.height);
+        let sliceEnd = naturalEnd;
+
+        if (naturalEnd < canvas.height) {
+          const minBreak = currentY + Math.floor(maxSliceHeightPx * 0.55);
+          const candidates = rowBreakPoints.filter((point) => point > minBreak && point < naturalEnd - 6);
+          if (candidates.length > 0) {
+            sliceEnd = candidates[candidates.length - 1];
+          }
         }
+
+        if (sliceEnd <= currentY) {
+          sliceEnd = naturalEnd;
+        }
+
+        const sliceHeightPx = sliceEnd - currentY;
+        const pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceHeightPx;
+        const pageCtx = pageCanvas.getContext('2d');
+        if (!pageCtx) {
+          throw new Error('Failed to render PDF page canvas.');
+        }
+
+        pageCtx.drawImage(
+          canvas,
+          0,
+          currentY,
+          canvas.width,
+          sliceHeightPx,
+          0,
+          0,
+          canvas.width,
+          sliceHeightPx
+        );
+
+        const pageImage = pageCanvas.toDataURL('image/jpeg', 0.75);
+        const renderedHeightMm = (sliceHeightPx / canvas.width) * contentWidthMm;
+
+        if (!isFirstPage) {
+          pdf.addPage();
+        }
+        pdf.addImage(pageImage, 'JPEG', pageMarginMm, pageMarginMm, contentWidthMm, renderedHeightMm);
+
+        isFirstPage = false;
+        currentY = sliceEnd;
       }
 
-      if (sliceEnd <= currentY) {
-        sliceEnd = naturalEnd;
-      }
+      let rawName = data?.clientName || 'Export';
+      let safeName = rawName.replace(/[\r\n\x00-\x1F\x7F<>:"/\\|?*]/g, '').trim();
+      if (!safeName) safeName = 'Export';
 
-      const sliceHeightPx = sliceEnd - currentY;
-      const pageCanvas = document.createElement('canvas');
-      pageCanvas.width = canvas.width;
-      pageCanvas.height = sliceHeightPx;
-      const pageCtx = pageCanvas.getContext('2d');
-      if (!pageCtx) {
-        throw new Error('Failed to render PDF page canvas.');
-      }
-
-      pageCtx.drawImage(
-        canvas,
-        0,
-        currentY,
-        canvas.width,
-        sliceHeightPx,
-        0,
-        0,
-        canvas.width,
-        sliceHeightPx
-      );
-
-      const pageImage = pageCanvas.toDataURL('image/jpeg', 0.65);
-      const renderedHeightMm = (sliceHeightPx / canvas.width) * contentWidthMm;
-
-      if (!isFirstPage) {
-        pdf.addPage();
-      }
-      pdf.addImage(pageImage, 'JPEG', pageMarginMm, pageMarginMm, contentWidthMm, renderedHeightMm);
-
-      isFirstPage = false;
-      currentY = sliceEnd;
+      pdf.save(`${safeName}_Report.pdf`);
+    } catch (err) {
+      console.error("PDF Export error:", err);
+      alert("Failed to export PDF.");
+    } finally {
+      containers.forEach(c => c.style.overflowX = 'auto');
     }
-
-    let rawName = data?.clientName || 'Export';
-    let safeName = rawName.replace(/[\r\n\x00-\x1F\x7F<>:"/\\|?*]/g, '').trim();
-    if (!safeName) safeName = 'Export';
-
-    pdf.save(`${safeName}_Report.pdf`);
-  } catch (err) {
-    console.error("PDF Export error:", err);
-    alert("Failed to export PDF.");
-  } finally {
-    element.classList.remove('pdf-export-dark-mode');
-    containers.forEach(c => c.style.overflowX = 'auto');
-  }
-};
+  };
 
   // const handleExportPDF = async () => {
   //   const element = document.getElementById('pdf-export-content');
-    
+
   //   // Temporarily disable overflow so html2canvas doesn't truncate the table
   //   const containers = element.querySelectorAll('.products-table-container');
   //   containers.forEach(c => c.style.overflowX = 'visible');
@@ -569,26 +585,26 @@ function App() {
   //       useCORS: true, 
   //       backgroundColor: '#0f172a' 
   //     });
-      
+
   //     const imgData = canvas.toDataURL('image/png');
-      
+
   //     const pdf = new jsPDF({
   //       orientation: 'portrait',
   //       unit: 'mm',
   //       format: 'a4'
   //     });
-      
+
   //     const pdfWidth = pdf.internal.pageSize.getWidth();
   //     const pageHeight = pdf.internal.pageSize.getHeight();
   //     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
+
   //     let heightLeft = pdfHeight;
   //     let position = 0;
-      
+
   //     // Add first page
   //     pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
   //     heightLeft -= pageHeight;
-      
+
   //     // Add subsequent pages if content overflows
   //     while (heightLeft > 0) {
   //       position = position - pageHeight;
@@ -596,12 +612,12 @@ function App() {
   //       pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
   //       heightLeft -= pageHeight;
   //     }
-      
+
   //     let rawName = data?.clientName || 'Export';
   //     // Strip control characters (newlines) and illegal path characters, but keep spaces/parentheses
   //     let safeName = rawName.replace(/[\r\n\x00-\x1F\x7F<>:"/\\|?*]/g, '').trim();
   //     if (!safeName) safeName = 'Export';
-      
+
   //     pdf.save(`${safeName}_Report.pdf`);
   //   } catch (err) {
   //     console.error("PDF Export error:", err);
@@ -818,139 +834,141 @@ function App() {
           </p>
         </header>
 
-      {isAdmin && activeView === 'add-user' ? (
-        <AddUserPanel
-          error={adminError}
-          message={adminMessage}
-          newUserForm={newUserForm}
-          creatingUser={creatingUser}
-          onNewUserFieldChange={handleNewUserFieldChange}
-          onCreateUser={handleCreateAdminUser}
-        />
-      ) : null}
+        {isAdmin && activeView === 'add-user' ? (
+          <AddUserPanel
+            error={adminError}
+            message={adminMessage}
+            newUserForm={newUserForm}
+            creatingUser={creatingUser}
+            onNewUserFieldChange={handleNewUserFieldChange}
+            onCreateUser={handleCreateAdminUser}
+          />
+        ) : null}
 
-      {isAdmin && activeView === 'manage-users' ? (
-        <ManageUsersPanel
-          users={adminUsers}
-          loading={adminLoading}
-          error={adminError}
-          message={adminMessage}
-          onFieldChange={handleAdminFieldChange}
-          onSave={handleSaveAdminUser}
-          onDisable={handleDisableAdminUser}
-        />
-      ) : null}
+        {isAdmin && activeView === 'manage-users' ? (
+          <ManageUsersPanel
+            users={adminUsers}
+            loading={adminLoading}
+            error={adminError}
+            message={adminMessage}
+            onFieldChange={handleAdminFieldChange}
+            onSave={handleSaveAdminUser}
+            onDisable={handleDisableAdminUser}
+          />
+        ) : null}
 
-      {activeView === 'extractor' && !data && (
-        <main className="main-content">
-          <div 
-            className={`dropzone card card-body text-center ${isDragging ? 'dragging' : ''} ${isParsing ? 'parsing' : ''}`}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-          >
-            {isParsing ? (
-              <div className="loader-container">
-                <div className="spinner"></div>
-                <p>Analyzing PDF Document...</p>
-              </div>
-            ) : (
-              <>
-                <div className="upload-icon">
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                    <polyline points="17 8 12 3 7 8"></polyline>
-                    <line x1="12" y1="3" x2="12" y2="15"></line>
-                  </svg>
+        {activeView === 'extractor' && !data && (
+          <main className="main-content">
+            <div
+              className={`dropzone card card-body text-center ${isDragging ? 'dragging' : ''} ${isParsing ? 'parsing' : ''}`}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+            >
+              {isParsing ? (
+                <div className="loader-container">
+                  <div className="spinner"></div>
+                  <p>Analyzing PDF Document...</p>
                 </div>
-                <h2>Drag & Drop your PDF here</h2>
-                <p>or click to browse from your computer</p>
-                <input 
-                  type="file" 
-                  accept="application/pdf" 
-                  onChange={onFileChange} 
-                  id="file-upload"
-                  className="file-input"
-                />
-                <label htmlFor="file-upload" className="btn btn-primary p-3">Browse Files</label>
-              </>
+              ) : (
+                <>
+                  <div className="upload-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                  </div>
+                  <h2>Drag & Drop your PDF here</h2>
+                  <p>or click to browse from your computer</p>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={onFileChange}
+                    id="file-upload"
+                    className="file-input"
+                  />
+                  <label htmlFor="file-upload" className="btn btn-primary p-3">Browse Files</label>
+                </>
+              )}
+            </div>
+            {error && <div className="error-message">{error}</div>}
+          </main>
+        )}
+
+        {activeView === 'extractor' && data && (
+          <div className="results-container card card-body shadow-sm">
+            <div className="results-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+              <h2 className="h4 me-3 mb-0">Extraction Results</h2>
+              <div className="header-actions d-flex gap-2">
+                <button className="btn btn-primary" onClick={handleExportPDF}>
+                  Export to PDF
+                </button>
+                <button className="btn btn-outline-secondary" onClick={() => setData(null)}>Upload Another File</button>
+              </div>
+            </div>
+
+            {data.yearsData.length === 0 ? (
+              <div className="no-data">No valid sales or returns found in this document.</div>
+            ) : (
+              <div className="years-list mt-3" id="pdf-export-content">
+                <div className="client-header mb-3">
+                  <h3>Client: <span className="client-name-highlight">{data.clientName}</span></h3>
+                </div>
+                {data.yearsData.map((fyData, i) => {
+                  const totalSell = fyData.products.reduce((acc, p) => acc + (p.sellQty || 0), 0);
+                  const totalReturn = fyData.products.reduce((acc, p) => acc + (p.returnQty || 0), 0);
+                  const totalNet = totalSell - totalReturn;
+
+                  return (
+                    <div key={i} className="year-card card card-body mb-3">
+                      <div className="year-header mb-2">
+                        <h3>Year: {fyData.year}</h3>
+                      </div>
+                      <div className="products-table-container table-responsive">
+                        <table className="products-table table table-hover mb-0">
+                          <thead>
+                            <tr>
+                              <th>Product Name</th>
+                              <th className="qty-col">Sell Qty</th>
+                              <th className="qty-col">Return Qty</th>
+                              <th className="qty-col">Net Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {fyData.products.map((prod, j) => {
+                              const netQty = (prod.sellQty || 0) - (prod.returnQty || 0);
+                              return (
+                                <tr key={j}>
+                                  <td>{prod.name}</td>
+                                  <td className="qty-col sell">{prod.sellQty > 0 ? prod.sellQty : '-'}</td>
+                                  <td className="qty-col return">{prod.returnQty > 0 ? prod.returnQty : '-'}</td>
+                                  <td className={`qty-col net ${netQty > 0 ? 'positive' : netQty < 0 ? 'negative' : ''}`}>
+                                    {netQty !== 0 ? netQty : '-'}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="totals-row">
+                              <td>Total</td>
+                              <td className="qty-col sell">{totalSell > 0 ? totalSell : '-'}</td>
+                              <td className="qty-col return">{totalReturn > 0 ? totalReturn : '-'}</td>
+                              <td className={`qty-col net ${totalNet > 0 ? 'positive' : totalNet < 0 ? 'negative' : ''}`}>
+                                {totalNet !== 0 ? totalNet : '-'}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
-          {error && <div className="error-message">{error}</div>}
-        </main>
-      )}
-
-      {activeView === 'extractor' && data && (
-        <div className="results-container card card-body shadow-sm">
-          <div className="results-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-            <h2 className="h4 me-3 mb-0">Extraction Results</h2>
-            <div className="header-actions d-flex gap-2">
-              <button className="btn btn-primary" onClick={handleExportPDF}>
-                Export to PDF
-              </button>
-              <button className="btn btn-outline-secondary" onClick={() => setData(null)}>Upload Another File</button>
-            </div>
-          </div>
-          
-          {data.yearsData.length === 0 ? (
-            <div className="no-data">No valid sales or returns found in this document.</div>
-          ) : (
-            <div className="years-list mt-3" id="pdf-export-content">
-              <div className="client-header mb-3">
-                <h3>Client: <span className="client-name-highlight">{data.clientName}</span></h3>
-              </div>
-              {data.yearsData.map((fyData, i) => {
-                const totalSell = fyData.products.reduce((acc, p) => acc + (p.sellQty || 0), 0);
-                const totalReturn = fyData.products.reduce((acc, p) => acc + (p.returnQty || 0), 0);
-                const totalNet = totalSell - totalReturn;
-                
-                return (
-                <div key={i} className="year-card card card-body mb-3">
-                  <div className="year-header mb-2">
-                    <h3>Year: {fyData.year}</h3>
-                  </div>
-                  <div className="products-table-container table-responsive">
-                    <table className="products-table table table-hover mb-0">
-                      <thead>
-                        <tr>
-                          <th>Product Name</th>
-                          <th className="qty-col">Sell Qty</th>
-                          <th className="qty-col">Sell Return Qty</th>
-                          <th className="qty-col">Net Qty</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fyData.products.map((prod, j) => {
-                          const netQty = (prod.sellQty || 0) - (prod.returnQty || 0);
-                          return (
-                          <tr key={j}>
-                            <td>{prod.name}</td>
-                            <td className="qty-col sell">{prod.sellQty > 0 ? prod.sellQty : '-'}</td>
-                            <td className="qty-col return">{prod.returnQty > 0 ? prod.returnQty : '-'}</td>
-                            <td className={`qty-col net ${netQty > 0 ? 'positive' : netQty < 0 ? 'negative' : ''}`}>
-                              {netQty !== 0 ? netQty : '-'}
-                            </td>
-                          </tr>
-                        )})}
-                      </tbody>
-                      <tfoot>
-                        <tr className="totals-row">
-                          <td>Total</td>
-                          <td className="qty-col sell">{totalSell > 0 ? totalSell : '-'}</td>
-                          <td className="qty-col return">{totalReturn > 0 ? totalReturn : '-'}</td>
-                          <td className={`qty-col net ${totalNet > 0 ? 'positive' : totalNet < 0 ? 'negative' : ''}`}>
-                            {totalNet !== 0 ? totalNet : '-'}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                </div>
-              )})}
-            </div>
-          )}
-        </div>
-      )}
+        )}
       </div>
 
       <GlobalFooter />
