@@ -1,15 +1,14 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 
 const runtimeUsersPath = '/tmp/sales-pdf-users.json';
 const usersDataVersionPath = '/tmp/sales-pdf-users-data-version';
 /** Increment when `seed-users.json` changes and production `/tmp` must re-merge (passwords, limits, etc.) */
-const USERS_DATA_VERSION = 2;
-const seedUsersPathCandidates = [
-  path.resolve(process.cwd(), 'netlify/functions/lib/seed-users.json'),
-  path.resolve(process.cwd(), 'pdf-ui/netlify/functions/lib/seed-users.json')
-];
+const USERS_DATA_VERSION = 3;
+const require = createRequire(fileURLToPath(import.meta.url));
+const bundledSeedUsers = require('./lib/seed-users.json');
 const defaultSeedUsers = {
   users: [
     {
@@ -73,17 +72,6 @@ function userKeyFromRecord(u) {
   return String(u?.username ?? '').toLowerCase();
 }
 
-async function readSeedDataFromFile() {
-  for (const candidatePath of seedUsersPathCandidates) {
-    try {
-      return JSON.parse(await fs.readFile(candidatePath, 'utf8'));
-    } catch {
-      // try next
-    }
-  }
-  return null;
-}
-
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
 const sanitizeUser = (user) => ({
@@ -121,8 +109,7 @@ async function ensureRuntimeUsersFile() {
     return;
   }
 
-  const fromFile = await readSeedDataFromFile();
-  const seedData = fromFile?.users != null ? fromFile : defaultSeedUsers;
+  const seedData = bundledSeedUsers?.users != null ? bundledSeedUsers : defaultSeedUsers;
   const seedUsers = Array.isArray(seedData?.users) ? seedData.users : defaultSeedUsers.users;
   let oldUsers = [];
   if (hasRuntime) {

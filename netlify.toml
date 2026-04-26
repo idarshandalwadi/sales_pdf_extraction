@@ -6,6 +6,8 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+  # Co-locate seed with the function bundle; cwd-based fs read is unreliable in the worker
+  included_files = ["netlify/functions/lib/seed-users.json"]
 
 [[redirects]]
   from = "/api/*"

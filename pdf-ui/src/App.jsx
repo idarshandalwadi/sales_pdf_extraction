@@ -272,6 +272,7 @@ function ManageUsersPanel({
 function Login({ onLogin }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
@@ -311,15 +312,32 @@ function Login({ onLogin }) {
                 />
               </div>
               <div className="form-group">
-                <label>Password</label>
-                <input
-                  type="password"
-                  className="form-control"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter password"
-                  required
-                />
+                <label htmlFor="login-password">Password</label>
+                <div className="input-group">
+                  <input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    className="form-control"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    required
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-pressed={showPassword}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    <i
+                      className={showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
               </div>
               {error && <div className="login-error">{error}</div>}
               <button type="submit" className="btn btn-primary w-100 login-btn">Sign In</button>

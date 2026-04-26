@@ -219,6 +219,17 @@ body {
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
+/* .form-group input { width: 100% } must not break Bootstrap .input-group flex */
+.form-group .input-group {
+  width: 100%;
+}
+
+.form-group .input-group > .form-control {
+  flex: 1 1 auto;
+  width: 1%;
+  min-width: 0;
+}
+
 .login-error {
   background: rgba(239, 68, 68, 0.1);
   color: #fca5a5;
