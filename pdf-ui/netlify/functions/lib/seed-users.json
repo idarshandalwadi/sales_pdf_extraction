@@ -15,7 +15,7 @@
       "password": "$2b$10$IpUCX51w7eFYhkGKxi4aQ.K8IElEFthXyp3JYQhlXfRkUWu11Fooy",
       "role": "user",
       "email": "dalwadidarshan83@gmail.com",
-      "pdf_limit": 2,
+      "pdf_limit": 20,
       "paid": false,
       "paid_date": null,
       "current_count": 0,
@@ -26,7 +26,7 @@
       "password": "$2b$10$GYGhfdpY6o51lNZEHKZVuu5j2eaUpmCS4qzSPvBDJvW3rNs0OpYuq",
       "role": "user",
       "email": "jay@gmail.com",
-      "pdf_limit": 10,
+      "pdf_limit": 100,
       "paid": false,
       "paid_date": null,
       "current_count": 1,
@@ -36,11 +36,22 @@
       "username": "Anushree",
       "password": "$2b$10$houqcquaP3MQyN/o7NZMVOiXbTJ.CjA67LoOBI/T7nLTH5JEr/E/i",
       "role": "user",
-      "pdf_limit": 3,
+      "pdf_limit": 30,
       "paid": false,
       "paid_date": null,
       "current_count": 0,
       "email": "anu@gmail.com",
+      "is_active": true
+    },
+    {
+      "username": "guest",
+      "password": "$2b$10$nCezzS6vFc11UVCa0PUhhufLVZKA1PnBh21RJFOKtWt4ZGHJ47pMC",
+      "role": "user",
+      "pdf_limit": 2,
+      "paid": false,
+      "paid_date": null,
+      "current_count": 0,
+      "email": "guest@gmail.com",
       "is_active": true
     }
   ]
