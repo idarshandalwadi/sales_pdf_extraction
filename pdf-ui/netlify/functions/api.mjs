@@ -3,6 +3,9 @@ import path from 'node:path';
 import bcrypt from 'bcryptjs';
 
 const runtimeUsersPath = '/tmp/sales-pdf-users.json';
+const usersDataVersionPath = '/tmp/sales-pdf-users-data-version';
+/** Increment when `seed-users.json` changes and production `/tmp` must re-merge (passwords, limits, etc.) */
+const USERS_DATA_VERSION = 2;
 const seedUsersPathCandidates = [
   path.resolve(process.cwd(), 'netlify/functions/lib/seed-users.json'),
   path.resolve(process.cwd(), 'pdf-ui/netlify/functions/lib/seed-users.json')
@@ -51,9 +54,35 @@ const defaultSeedUsers = {
       current_count: 0,
       email: 'anu@gmail.com',
       is_active: true
+    },
+    {
+      username: 'guest',
+      password: '$2b$10$nCezzS6vFc11UVCa0PUhhufLVZKA1PnBh21RJFOKtWt4ZGHJ47pMC',
+      role: 'user',
+      pdf_limit: 2,
+      paid: false,
+      paid_date: null,
+      current_count: 0,
+      email: 'guest@gmail.com',
+      is_active: true
     }
   ]
 };
+
+function userKeyFromRecord(u) {
+  return String(u?.username ?? '').toLowerCase();
+}
+
+async function readSeedDataFromFile() {
+  for (const candidatePath of seedUsersPathCandidates) {
+    try {
+      return JSON.parse(await fs.readFile(candidatePath, 'utf8'));
+    } catch {
+      // try next
+    }
+  }
+  return null;
+}
 
 const jsonHeaders = { 'Content-Type': 'application/json' };
 
@@ -69,26 +98,59 @@ const sanitizeUser = (user) => ({
 
 const isUserActive = (user) => user?.is_active !== false;
 
+/**
+ * Netlify reuses /tmp; once `sales-pdf-users.json` exists, editing `seed-users.json` in git has no
+ * effect until this version is bumped, which re-merges seed (passwords, etc.) and preserves
+ * `current_count` and any users not listed in the seed.
+ */
 async function ensureRuntimeUsersFile() {
+  let hasRuntime = true;
   try {
     await fs.access(runtimeUsersPath);
   } catch {
-    let seedRaw = null;
-    for (const candidatePath of seedUsersPathCandidates) {
-      try {
-        seedRaw = await fs.readFile(candidatePath, 'utf8');
-        break;
-      } catch {
-        // Try next candidate path.
-      }
-    }
-
-    if (!seedRaw) {
-      seedRaw = `${JSON.stringify(defaultSeedUsers, null, 2)}\n`;
-    }
-
-    await fs.writeFile(runtimeUsersPath, seedRaw, 'utf8');
+    hasRuntime = false;
   }
+  let recordVersion = 0;
+  try {
+    recordVersion = Number((await fs.readFile(usersDataVersionPath, 'utf8')).trim());
+  } catch {
+    recordVersion = 0;
+  }
+  const upToDate = hasRuntime && recordVersion >= USERS_DATA_VERSION;
+  if (upToDate) {
+    return;
+  }
+
+  const fromFile = await readSeedDataFromFile();
+  const seedData = fromFile?.users != null ? fromFile : defaultSeedUsers;
+  const seedUsers = Array.isArray(seedData?.users) ? seedData.users : defaultSeedUsers.users;
+  let oldUsers = [];
+  if (hasRuntime) {
+    try {
+      const raw = await fs.readFile(runtimeUsersPath, 'utf8');
+      oldUsers = JSON.parse(raw).users ?? [];
+    } catch {
+      oldUsers = [];
+    }
+  }
+  const oldByKey = new Map(oldUsers.map((u) => [userKeyFromRecord(u), u]));
+  const keyInSeed = new Set(seedUsers.map((u) => userKeyFromRecord(u)));
+  const merged = seedUsers.map((fromSeed) => {
+    const prev = oldByKey.get(userKeyFromRecord(fromSeed));
+    if (!prev) return { ...fromSeed };
+    return { ...prev, ...fromSeed, current_count: Number(prev.current_count ?? 0) };
+  });
+  for (const prev of oldUsers) {
+    if (!keyInSeed.has(userKeyFromRecord(prev))) merged.push(prev);
+  }
+  const payload = {
+    users: merged.map((user) => ({
+      ...user,
+      current_count: Number(user.current_count ?? 0)
+    }))
+  };
+  await fs.writeFile(runtimeUsersPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await fs.writeFile(usersDataVersionPath, String(USERS_DATA_VERSION), 'utf8');
 }
 
 async function readUsers() {
