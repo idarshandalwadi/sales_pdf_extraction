@@ -3,11 +3,13 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  NODE_VERSION = "20"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-  # Co-locate seed with the function bundle; cwd-based fs read is unreliable in the worker
-  included_files = ["netlify/functions/lib/seed-users.json"]
+  # `seed-users.json` is ESM-imported in api.mjs (inlined in the bundle) — no included_files step.
 
 [[redirects]]
   from = "/api/*"

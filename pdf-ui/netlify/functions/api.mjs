@@ -1,14 +1,13 @@
+import { Buffer } from 'node:buffer';
 import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
+// Bundled into the function (no disk read at init). Keeps Netlify from breaking on `import.meta.url` paths.
+import seedUsersFile from './lib/seed-users.json' with { type: 'json' };
 
 const runtimeUsersPath = '/tmp/sales-pdf-users.json';
 const usersDataVersionPath = '/tmp/sales-pdf-users-data-version';
 /** Increment when `seed-users.json` changes and production `/tmp` must re-merge (passwords, limits, etc.) */
 const USERS_DATA_VERSION = 3;
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const seedFilePath = path.join(__dirname, 'lib', 'seed-users.json');
 
 const defaultSeedUsers = {
   users: [
@@ -87,19 +86,9 @@ const sanitizeUser = (user) => ({
 
 const isUserActive = (user) => user?.is_active !== false;
 
-/**
- * Do not `require` JSON at module load: Netlify's esbuild bundle + createRequire can throw and
- * take down the whole function. Read from the deployed `lib/` (see netlify.toml included_files).
- */
-async function loadSeedFileData() {
-  try {
-    const raw = await fs.readFile(seedFilePath, 'utf8');
-    const data = JSON.parse(raw);
-    if (Array.isArray(data?.users) && data.users.length) {
-      return data;
-    }
-  } catch {
-    // file missing, wrong path after bundle, or invalid JSON
+function getSeedDataFromModule() {
+  if (Array.isArray(seedUsersFile?.users) && seedUsersFile.users.length) {
+    return seedUsersFile;
   }
   return defaultSeedUsers;
 }
@@ -127,7 +116,7 @@ async function ensureRuntimeUsersFile() {
     return;
   }
 
-  const seedData = await loadSeedFileData();
+  const seedData = getSeedDataFromModule();
   const seedUsers = Array.isArray(seedData?.users) && seedData.users.length ? seedData.users : defaultSeedUsers.users;
   let oldUsers = [];
   if (hasRuntime) {
@@ -158,11 +147,37 @@ async function ensureRuntimeUsersFile() {
   await fs.writeFile(usersDataVersionPath, String(USERS_DATA_VERSION), 'utf8');
 }
 
+function cloneUserRow(user) {
+  return { ...user };
+}
+
 async function readUsers() {
-  await ensureRuntimeUsersFile();
-  const raw = await fs.readFile(runtimeUsersPath, 'utf8');
-  const parsed = JSON.parse(raw);
-  return parsed?.users ?? [];
+  const fromDisk = async () => {
+    await ensureRuntimeUsersFile();
+    const raw = await fs.readFile(runtimeUsersPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.users)) {
+      throw new Error('Invalid users in runtime store');
+    }
+    return parsed.users;
+  };
+  try {
+    return await fromDisk();
+  } catch (e) {
+    console.error('readUsers', e);
+    try {
+      await fs.rm(runtimeUsersPath, { force: true });
+      await fs.rm(usersDataVersionPath, { force: true });
+    } catch (rmErr) {
+      console.error('readUsers rm /tmp', rmErr);
+    }
+    try {
+      return await fromDisk();
+    } catch (e2) {
+      console.error('readUsers after /tmp reset', e2);
+      return defaultSeedUsers.users.map((u) => cloneUserRow(u));
+    }
+  }
 }
 
 async function writeUsers(users) {
@@ -183,8 +198,8 @@ function getEventPathString(event) {
       /* fall through */
     }
   }
-  const p =
-    event?.path ?? event?.rawPath ?? event?.requestContext?.http?.path ?? event?.requestContext?.path ?? '';
+  const p = event?.path ?? event?.rawPath ?? event?.requestContext?.http?.path ?? event?.requestContext?.path;
+  if (p == null) return '';
   return String(p).split('?')[0];
 }
 
@@ -213,26 +228,44 @@ function response(statusCode, body) {
   };
 }
 
-function parseBody(rawBody) {
-  if (!rawBody) return {};
+function parseJsonBodyString(raw) {
+  if (raw == null || raw === '') return {};
+  const s = typeof raw === 'string' ? raw : String(raw);
+  if (!s) return {};
   try {
-    return JSON.parse(rawBody);
+    return JSON.parse(s);
   } catch {
     return {};
   }
 }
 
-export async function handler(event) {
-  const method = String(event.httpMethod || event.requestContext?.http?.method || '').toUpperCase();
-  const routePath = getApiPath(getEventPathString(event));
-  const body = parseBody(
-    event.body
-      && event.isBase64Encoded
-      ? Buffer.from(event.body, 'base64').toString('utf8')
-      : event.body
-  );
+/**
+ * Some runtimes pass a JSON object for `body`; do not `JSON.parse` a non-string (throws → 502).
+ */
+function parseEventBody(event) {
+  if (event?.body == null) return {};
+  const b = event.body;
+  if (Buffer.isBuffer(b)) {
+    return parseJsonBodyString(b.toString('utf8'));
+  }
+  if (typeof b === 'object' && b !== null && !Array.isArray(b)) {
+    return { ...b };
+  }
+  if (event.isBase64Encoded) {
+    try {
+      return parseJsonBodyString(Buffer.from(String(b), 'base64').toString('utf8'));
+    } catch {
+      return {};
+    }
+  }
+  return parseJsonBodyString(String(b));
+}
 
+export async function handler(event) {
   try {
+    const method = String(event?.httpMethod || event?.requestContext?.http?.method || 'GET').toUpperCase();
+    const routePath = getApiPath(getEventPathString(event));
+    const body = parseEventBody(event);
     if (method === 'POST' && routePath === '/api/login') {
       const { username, password } = body;
       const users = await readUsers();
@@ -243,7 +276,13 @@ export async function handler(event) {
       if (!user) return response(401, { error: 'Invalid credentials' });
       if (!isUserActive(user)) return response(403, { error: 'User is disabled. Please contact administrator.' });
 
-      let isValidPassword = await bcrypt.compare(String(password ?? ''), String(user.password ?? ''));
+      let isValidPassword = false;
+      try {
+        isValidPassword = await bcrypt.compare(String(password ?? ''), String(user.password ?? ''));
+      } catch (e) {
+        console.error('bcrypt.compare', e);
+        isValidPassword = false;
+      }
       if (!isValidPassword && String(user.password ?? '') === String(password ?? '')) {
         const upgradedUser = { ...user, password: await bcrypt.hash(String(password ?? ''), 10) };
         users[userIndex] = upgradedUser;
@@ -398,6 +437,7 @@ export async function handler(event) {
 
     return response(404, { error: 'Not found' });
   } catch (error) {
+    console.error('api handler', error);
     return response(500, {
       error: 'Server error',
       message: error instanceof Error ? error.message : 'Unknown error'
