@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { createRequire } from 'node:module';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 
@@ -7,8 +7,9 @@ const runtimeUsersPath = '/tmp/sales-pdf-users.json';
 const usersDataVersionPath = '/tmp/sales-pdf-users-data-version';
 /** Increment when `seed-users.json` changes and production `/tmp` must re-merge (passwords, limits, etc.) */
 const USERS_DATA_VERSION = 3;
-const require = createRequire(fileURLToPath(import.meta.url));
-const bundledSeedUsers = require('./lib/seed-users.json');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const seedFilePath = path.join(__dirname, 'lib', 'seed-users.json');
+
 const defaultSeedUsers = {
   users: [
     {
@@ -87,6 +88,23 @@ const sanitizeUser = (user) => ({
 const isUserActive = (user) => user?.is_active !== false;
 
 /**
+ * Do not `require` JSON at module load: Netlify's esbuild bundle + createRequire can throw and
+ * take down the whole function. Read from the deployed `lib/` (see netlify.toml included_files).
+ */
+async function loadSeedFileData() {
+  try {
+    const raw = await fs.readFile(seedFilePath, 'utf8');
+    const data = JSON.parse(raw);
+    if (Array.isArray(data?.users) && data.users.length) {
+      return data;
+    }
+  } catch {
+    // file missing, wrong path after bundle, or invalid JSON
+  }
+  return defaultSeedUsers;
+}
+
+/**
  * Netlify reuses /tmp; once `sales-pdf-users.json` exists, editing `seed-users.json` in git has no
  * effect until this version is bumped, which re-merges seed (passwords, etc.) and preserves
  * `current_count` and any users not listed in the seed.
@@ -109,8 +127,8 @@ async function ensureRuntimeUsersFile() {
     return;
   }
 
-  const seedData = bundledSeedUsers?.users != null ? bundledSeedUsers : defaultSeedUsers;
-  const seedUsers = Array.isArray(seedData?.users) ? seedData.users : defaultSeedUsers.users;
+  const seedData = await loadSeedFileData();
+  const seedUsers = Array.isArray(seedData?.users) && seedData.users.length ? seedData.users : defaultSeedUsers.users;
   let oldUsers = [];
   if (hasRuntime) {
     try {
@@ -157,14 +175,28 @@ async function writeUsers(users) {
   await fs.writeFile(runtimeUsersPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
-function getApiPath(eventPath = '') {
-  if (eventPath.startsWith('/api/')) return eventPath;
-  if (eventPath === '/api') return '/api';
-  if (eventPath.startsWith('/.netlify/functions/api/')) {
-    return `/api/${eventPath.replace('/.netlify/functions/api/', '')}`;
+function getEventPathString(event) {
+  if (event?.rawUrl) {
+    try {
+      return new URL(event.rawUrl).pathname;
+    } catch {
+      /* fall through */
+    }
   }
-  if (eventPath === '/.netlify/functions/api') return '/api';
-  return eventPath;
+  const p =
+    event?.path ?? event?.rawPath ?? event?.requestContext?.http?.path ?? event?.requestContext?.path ?? '';
+  return String(p).split('?')[0];
+}
+
+function getApiPath(eventPath = '') {
+  const pathForRoute = String(eventPath).split('?')[0];
+  if (pathForRoute.startsWith('/api/')) return pathForRoute;
+  if (pathForRoute === '/api') return '/api';
+  if (pathForRoute.startsWith('/.netlify/functions/api/')) {
+    return `/api/${pathForRoute.replace('/.netlify/functions/api/', '')}`;
+  }
+  if (pathForRoute === '/.netlify/functions/api') return '/api';
+  return pathForRoute;
 }
 
 function hasAdminAccess(headers = {}) {
@@ -191,9 +223,14 @@ function parseBody(rawBody) {
 }
 
 export async function handler(event) {
-  const method = event.httpMethod;
-  const routePath = getApiPath(event.path);
-  const body = parseBody(event.body);
+  const method = String(event.httpMethod || event.requestContext?.http?.method || '').toUpperCase();
+  const routePath = getApiPath(getEventPathString(event));
+  const body = parseBody(
+    event.body
+      && event.isBase64Encoded
+      ? Buffer.from(event.body, 'base64').toString('utf8')
+      : event.body
+  );
 
   try {
     if (method === 'POST' && routePath === '/api/login') {
